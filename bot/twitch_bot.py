@@ -1,4 +1,5 @@
 from bot.command_queue import CommandQueue
+from bot.cooldown_manager import CooldownManager
 from controller.input_handler import handle_input
 from twitchio.ext import commands
 from dotenv import load_dotenv
@@ -7,6 +8,7 @@ import os
 load_dotenv()
 
 command_queue = CommandQueue()
+cooldowns = CooldownManager(cooldown_seconds=2)
 
 def append_to_input_file(command_str):
     with open("controller/input.txt", "a") as f:
@@ -46,6 +48,18 @@ async def event_message(message):
     if not message.content.startswith("!"):
         return
     
+    if cooldowns.is_on_cooldown(message.author.name):
+        print(f"⏳ {message.author.name} is on cooldown.")
+        return
+
+    # If valid command
+    cooldowns.update_timestamp(message.author.name)
+    
+    # Skip if queue is too long
+    if command_queue.size() >= 100:
+        print(f"🚫 Queue is full. Command from {message.author.name} was ignored.")
+        return
+
     if message.content.startswith("!"):
         full_cmd = message.content[1:].lower() # Remove "!" and lowercase
         base = ''.join(filter(str.isalpha, full_cmd)) # Extract the letters (e.g. "up" from "up4")

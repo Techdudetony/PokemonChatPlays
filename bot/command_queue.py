@@ -13,6 +13,7 @@ class CommandQueue:
 
         while True:
             command_name, count = await self.queue.get()
+            await asyncio.sleep(self.delay)
             for i in range(count):
                 print(f"[Queue] Processing {command_name} ({i + 1}/{count})")
                 await handle_function(command_name)
@@ -21,3 +22,6 @@ class CommandQueue:
     
     async def add_command(self, command_name, count):
         await self.queue.put((command_name, count))
+        
+    def size(self):
+        return self.queue.qsize()
