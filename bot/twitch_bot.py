@@ -8,6 +8,19 @@ load_dotenv()
 
 command_queue = CommandQueue()
 
+def append_to_input_file(command_str):
+    with open("controller/input.txt", "a") as f:
+        f.write(f"{command_str}\n")
+        
+def create_command_handler(cmd_name, response):
+    @commands.command(name=cmd_name)
+    async def command_template(ctx):
+        count = getattr(ctx.message, 'command_count', 1)
+        for i in range(count):
+            print(f"Executing {cmd_name} ({i+1}/{count})")
+            append_to_input_file(f"!{cmd_name}{count}")
+    bot.add_command(command_template)
+
 print("Loaded env:")
 print("Token:", os.getenv("TWITCH_TOKEN"))
 print("Nick:", os.getenv("TWITCH_NICK"))
@@ -33,15 +46,14 @@ async def event_message(message):
     if not message.content.startswith("!"):
         return
     
-    full_cmd = message.content[1:].lower() # Remove "!" and lowercase
-    base_cmd = ''.join(filter(str.isalpha, full_cmd)) # Extract the letters (e.g. "up" from "up4")
-    count_str = ''.join(filter(str.isdigit, full_cmd)) # Extract the number (e.g. "4" from "up4")
-
-    count = int(count_str) if count_str else 1
-    count = min(count, 10) # Limit to 10 max
-
-    message.command_name = base_cmd
-    message.command_count = count
+    if message.content.startswith("!"):
+        full_cmd = message.content[1:].lower() # Remove "!" and lowercase
+        base = ''.join(filter(str.isalpha, full_cmd)) # Extract the letters (e.g. "up" from "up4")
+        digits = ''.join(filter(str.isdigit, full_cmd)) # Extract the number (e.g. "4" from "up4")
+        count = min(int(digits) if digits else 1, 10)
+        
+        command_str = f"!{base}{count}"
+        append_to_input_file(command_str)
 
     await bot.handle_commands(message)
 
@@ -57,11 +69,6 @@ commands_map = {
 }
 
 for cmd, response in commands_map.items():
-    @bot.command(name=cmd)
-    async def command_template(ctx, resp=response, cmd_name=cmd):
-        count = getattr(ctx.message, 'command_count', 1)
-        for i in range(count):
-            print(f"Executing {cmd_name} ({i+1}/{count})")
-            # TODO: Trigger Lua logic here per step
+    create_command_handler(cmd, response)
 
 bot.run()

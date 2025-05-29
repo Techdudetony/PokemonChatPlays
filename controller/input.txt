@@ -1,3 +1,0 @@
-!down3
-!up4
-!left5

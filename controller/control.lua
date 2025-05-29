@@ -1,7 +1,5 @@
--- Full path or relative to BizHawk working directory
-local input_file = "controller/input.txt"
+local input_file = "C:/Users/lilto/PokemonChatPlays/controller/input.txt"
 
--- Reads and parses commands from the file
 function read_input_file()
     local inputs = {}
 
@@ -11,25 +9,34 @@ function read_input_file()
     end
 
     for line in f:lines() do
-        local command = line:match("^%s*(.-)%s*$") -- trim whitespace
+        local command = line:match("^%s*(.-)%s*$")
         if command ~= "" then
-            local base, count = command:match("!(%a+)(%d*)") -- e.g., !up3 → "up", "3"
-            count = tonumber(count) or 1
-            count = math.min(count, 10) -- cap to prevent spam
+            local base, count = command:match("!(%a+)(%d*)")
+            if base then
+                base = string.lower(base)
+                count = tonumber(count) or 1
+                count = math.min(count, 10)
 
-            for i = 1, count do
-                table.insert(inputs, base)
+                for i = 1, count do
+                    table.insert(inputs, base)
+                end
             end
         end
     end
 
     f:close()
-    os.remove(input_file) -- clear after reading
+    os.remove(input_file)
+
+    if #inputs > 0 then
+        print("✅ Loaded commands from input.txt")
+    end
+
     return inputs
 end
 
--- Maps parsed commands to joypad input
 function map_command_to_input(command)
+    if type(command) ~= "string" then return nil end
+
     local map = {
         up = {Up=true},
         down = {Down=true},
@@ -44,18 +51,23 @@ function map_command_to_input(command)
     return map[command]
 end
 
--- Main loop: runs every frame
 while true do
-    local commands = read_input_file() -- ✅ avoid shadowing the function
+    local commands = read_input_file()
 
     for _, cmd in ipairs(commands) do
         local joypad_input = map_command_to_input(cmd)
-        if joypad_input then
+
+        if joypad_input and type(joypad_input) == "table" then
             print("Executing: " .. cmd)
-            joypad.set(1, joypad_input)
-            emu.frameadvance() -- press held for 1 frame
+
+            -- 🟢 Hold the input for 5 frames (1 step)
+            local move_frames = 10
+            for i = 1, move_frames do
+                joypad.set(joypad_input)
+                emu.frameadvance()
+            end
         else
-            print("Invalid command: " .. tostring(cmd))
+            print("⚠️ Skipping invalid command: " .. tostring(cmd))
         end
     end
 
