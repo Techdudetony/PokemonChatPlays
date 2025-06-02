@@ -1,5 +1,6 @@
 from bot.command_queue import CommandQueue
 from bot.cooldown_manager import CooldownManager
+from bot.chat_rate_monitor import ChatRateMonitor
 from controller.input_handler import handle_input
 from twitchio.ext import commands
 from dotenv import load_dotenv
@@ -7,8 +8,14 @@ import os
 
 load_dotenv()
 
+SPAM_THRESHOLD = int(os.getenv("SPAM_THRESHOLD", 12))
+SLOWMODE_DISABLE_THRESHOLD = int(os.getenv("SLOWMODE_DISABLE_THRESHOLD", 6))
+CHAT_WINDOW_SIZE = int(os.getenv("CHAT_WINDOW_SIZE", 10))
+CHAT_COOLDOWN_PERIOD = int(os.getenv("CHAT_COOLDOWN_PERIOD", 5))
+
 command_queue = CommandQueue()
 cooldowns = CooldownManager(cooldown_seconds=2)
+chat_monitor = ChatRateMonitor(window_size=CHAT_WINDOW_SIZE, cooldown_period=CHAT_COOLDOWN_PERIOD)
 
 def append_to_input_file(command_str):
     with open("controller/input.txt", "a") as f:
@@ -43,31 +50,40 @@ async def event_ready():
 @bot.event
 async def event_message(message):
     print(f"{message.author.name}: {message.content}")
+    
+    chat_monitor.log_message(username=message.author.name)
 
-    # Only respond to messages starting with "!"
+    # Auto Slow Mode ON
+    if chat_monitor.is_spammy(threshold=SPAM_THRESHOLD):
+        print("🚨 Spam detected! Enabling Slow Mode.")
+        await message.channel.slowmode_delay(5)
+
+    # Auto Slow Mode OFF
+    elif chat_monitor.should_disable_slowmode(disable_threshold=SLOWMODE_DISABLE_THRESHOLD):
+        print("✅ Spam has settled. Disabling Slow Mode.")
+        await message.channel.slowmode_delay(0)
+
     if not message.content.startswith("!"):
         return
-    
+
+    # Per-user cooldown check
     if cooldowns.is_on_cooldown(message.author.name):
         print(f"⏳ {message.author.name} is on cooldown.")
         return
 
-    # If valid command
     cooldowns.update_timestamp(message.author.name)
-    
-    # Skip if queue is too long
+
     if command_queue.size() >= 100:
         print(f"🚫 Queue is full. Command from {message.author.name} was ignored.")
         return
 
-    if message.content.startswith("!"):
-        full_cmd = message.content[1:].lower() # Remove "!" and lowercase
-        base = ''.join(filter(str.isalpha, full_cmd)) # Extract the letters (e.g. "up" from "up4")
-        digits = ''.join(filter(str.isdigit, full_cmd)) # Extract the number (e.g. "4" from "up4")
-        count = min(int(digits) if digits else 1, 10)
-        
-        command_str = f"!{base}{count}"
-        append_to_input_file(command_str)
+    full_cmd = message.content[1:].lower()
+    base = ''.join(filter(str.isalpha, full_cmd))
+    digits = ''.join(filter(str.isdigit, full_cmd))
+    count = min(int(digits) if digits else 1, 10)
+
+    command_str = f"!{base}{count}"
+    append_to_input_file(command_str)
 
     await bot.handle_commands(message)
 
