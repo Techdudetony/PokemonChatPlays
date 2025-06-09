@@ -4,6 +4,7 @@ from bot.chat_rate_monitor import ChatRateMonitor
 from controller.input_handler import handle_input
 from twitchio.ext import commands
 from dotenv import load_dotenv
+import asyncio
 import os
 
 load_dotenv()
@@ -16,10 +17,6 @@ CHAT_COOLDOWN_PERIOD = int(os.getenv("CHAT_COOLDOWN_PERIOD", 5))
 command_queue = CommandQueue()
 cooldowns = CooldownManager(cooldown_seconds=2)
 chat_monitor = ChatRateMonitor(window_size=CHAT_WINDOW_SIZE, cooldown_period=CHAT_COOLDOWN_PERIOD)
-
-def append_to_input_file(command_str):
-    with open("controller/input.txt", "a") as f:
-        f.write(f"{command_str}\n")
         
 def create_command_handler(cmd_name, response):
     @commands.command(name=cmd_name)
@@ -27,7 +24,6 @@ def create_command_handler(cmd_name, response):
         count = getattr(ctx.message, 'command_count', 1)
         for i in range(count):
             print(f"Executing {cmd_name} ({i+1}/{count})")
-            append_to_input_file(f"!{cmd_name}{count}")
     bot.add_command(command_template)
 
 print("Loaded env:")
@@ -73,7 +69,7 @@ async def event_message(message):
 
     cooldowns.update_timestamp(message.author.name)
 
-    if command_queue.size() >= 100:
+    if command_queue.is_full():
         print(f"🚫 Queue is full. Command from {message.author.name} was ignored.")
         return
 
@@ -82,11 +78,11 @@ async def event_message(message):
     digits = ''.join(filter(str.isdigit, full_cmd))
     count = min(int(digits) if digits else 1, 10)
 
-    command_str = f"!{base}{count}"
-    append_to_input_file(command_str)
+    print(f"📝 Queued: {base} x{count} by {message.author.name}")
+    await command_queue.add_command(base, count)
 
     await bot.handle_commands(message)
-
+    
 commands_map = {
     "up": "Moving up",
     "down": "Moving down",

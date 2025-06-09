@@ -1,8 +1,8 @@
 import asyncio
 
 class CommandQueue:
-    def __init__(self, delay=0.5):
-        self.queue = asyncio.Queue()
+    def __init__(self, delay=3.0, max_size=50):
+        self.queue = asyncio.Queue(maxsize=max_size)
         self.delay = delay
         self.is_running = False
 
@@ -25,3 +25,6 @@ class CommandQueue:
         
     def size(self):
         return self.queue.qsize()
+
+    def is_full(self):
+        return self.queue.full()
